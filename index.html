@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ScoutDeck — drop a still</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --panel: #141416;
+    --line: #2a2a2e;
+    --amber: #e8b86d;
+    --dim: #8a8680;
+    --text: #efeae2;
+    --good: #8fbf8a;
+    --warn: #d4a24c;
+    --bad: #c97a6a;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+  header {
+    padding: 18px 22px 12px;
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  }
+  header strong { color: var(--amber); letter-spacing: .12em; font-size: 12px; }
+  header span { color: var(--dim); font-size: 12px; }
+  main { display: grid; grid-template-columns: 1.1fr .9fr; gap: 0; min-height: calc(100vh - 58px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .stage { border-right: 1px solid var(--line); padding: 18px; }
+  .side { padding: 18px; overflow: auto; }
+  #drop {
+    border: 1px dashed #3a3936; min-height: 220px; display: flex; align-items: center;
+    justify-content: center; text-align: center; color: var(--dim); cursor: pointer;
+    background: #101011;
+  }
+  #drop.hot { border-color: var(--amber); color: var(--amber); }
+  #frameWrap { position: relative; margin-top: 14px; background: #000; display: none; }
+  #frameWrap img, #frameWrap canvas.view { width: 100%; height: auto; display: block; }
+  #cropBox {
+    position: absolute; border: 1px solid var(--amber); pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.45);
+  }
+  .meta { font-family: var(--mono); font-size: 11px; color: var(--amber); padding: 8px 0; }
+  label { display: block; font-size: 11px; color: var(--dim); margin: 10px 0 4px; letter-spacing: .06em; text-transform: uppercase; }
+  input, select, textarea {
+    width: 100%; background: #0e0e10; color: var(--text); border: 1px solid var(--line);
+    padding: 8px 10px; font: 13px var(--sans);
+  }
+  textarea { min-height: 64px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  button {
+    background: var(--amber); color: #1a140c; border: 0; padding: 10px 14px;
+    font: 600 13px var(--sans); cursor: pointer; width: 100%; margin-top: 12px;
+  }
+  button.ghost { background: transparent; color: var(--amber); border: 1px solid var(--amber); }
+  .card { background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; margin: 10px 0; }
+  .card h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .1em; color: var(--amber); text-transform: uppercase; }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 4px 10px; font-family: var(--mono); font-size: 12px; }
+  .kv b { color: var(--dim); font-weight: 400; }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 1px 6px; border: 1px solid currentColor; margin-left: 6px; }
+  .CALC { color: #8bb8d4; } .SPEC { color: var(--good); } .EST { color: var(--warn); } .MISS { color: var(--bad); }
+  pre { white-space: pre-wrap; word-break: break-word; font: 11px var(--mono); color: #c8c2b8; max-height: 240px; overflow: auto; }
+  .notes li { margin: 4px 0; color: var(--dim); }
+  svg.plot { width: 100%; background: #0e0e10; border: 1px solid var(--line); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <strong>SCOUTDECK</strong>
+  <span>Drop a still from the iPhone 16 Pro Max or S26 Ultra. Nothing is invented.</span>
+</header>
+<main>
+  <section class="stage">
+    <div id="drop">Tap or drop a JPEG / HEIC / DNG / PNG<br><small>Location must be on in Camera or sun cannot be computed</small></div>
+    <input id="file" type="file" accept="image/*,.heic,.heif,.dng" hidden />
+    <div id="frameWrap">
+      <img id="preview" alt="scout still" />
+      <div id="cropBox"></div>
+    </div>
+    <div class="meta" id="frameMeta"></div>
+    <canvas id="work" class="hidden"></canvas>
+  </section>
+  <section class="side">
+    <div class="card">
+      <h3>Taking package</h3>
+      <div class="row">
+        <div>
+          <label>Body / mode</label>
+          <select id="body"></select>
+        </div>
+        <div>
+          <label>Taking lens (mm)</label>
+          <input id="taking" type="number" value="32" min="8" max="300" step="1" />
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>T-stop</label>
+          <input id="tstop" type="number" value="2.8" min="1.0" max="22" step="0.1" />
+        </div>
+        <div>
+          <label>Aspect</label>
+          <select id="aspect">
+            <option value="2.39">2.39:1</option>
+            <option value="2.00">2.00:1</option>
+            <option value="1.85">1.85:1</option>
+            <option value="1.78">1.78:1</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Scene context — you type this. The phone will not.</h3>
+      <label>Scene heading</label>
+      <input id="heading" placeholder="INT. DINER – NIGHT" />
+      <label>Intent</label>
+      <textarea id="intent" placeholder="One sentence. What the scene is doing."></textarea>
+      <div class="row">
+        <div>
+          <label>Look</label>
+          <select id="look">
+            <option value="avail">Available / match scout</option>
+            <option value="lowkey">Motivated low-key</option>
+            <option value="dayint">Day interior, controlled</option>
+            <option value="night_ext">Night exterior</option>
+          </select>
+        </div>
+        <div>
+          <label>Window / key distance (m)</label>
+          <input id="dist" type="number" value="4" min="0.5" max="40" step="0.5" />
+        </div>
+      </div>
+    </div>
+    <div id="report"></div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
